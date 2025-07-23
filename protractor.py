@@ -154,7 +154,7 @@ class ControlPanelApp:
     def __init__(self, master, windows):
         self.panel = tk.Toplevel(master)
         self.panel.title("Control Panel")
-        self.panel.geometry("300x150")  # 擴充寬度以容納全部欄位
+        self.panel.geometry("300x150")  #面板大小
 
         self.windows = windows
         self.entries = {}
@@ -166,16 +166,14 @@ class ControlPanelApp:
             w = win.winfo_width()
             h = win.winfo_height()
 
-            # 主標籤（代表視窗名稱）
             tk.Label(self.panel, text=f"{name.capitalize()} :").grid(row=row, column=0, sticky='e', padx=5, pady=2)
 
-            # Width 標籤與輸入欄位
+            # 輸入欄位
             tk.Label(self.panel, text="Width").grid(row=row, column=1, sticky='e')
             w_var = tk.StringVar(value=str(w))
             w_entry = tk.Entry(self.panel, textvariable=w_var, width=8)
             w_entry.grid(row=row, column=2, padx=2)
 
-            # Height 標籤與輸入欄位
             tk.Label(self.panel, text="Height").grid(row=row, column=3, sticky='e')
             h_var = tk.StringVar(value=str(h))
             h_entry = tk.Entry(self.panel, textvariable=h_var, width=8)
@@ -184,8 +182,8 @@ class ControlPanelApp:
             self.entries[name] = {'width': w_var, 'height': h_var}
             row += 1
 
-        # 套用按鈕
-        tk.Button(self.panel, text="套用新尺寸", command=self.apply_sizes).grid(row=row, column=2, columnspan=3, pady=10)
+        # 按鈕
+        tk.Button(self.panel, text="更新尺寸", command=self.apply_sizes).grid(row=row, column=2, columnspan=3, pady=10)
 
     def apply_sizes(self):
         new_positions = {}
@@ -198,13 +196,10 @@ class ControlPanelApp:
                 y = self.windows[name].winfo_y()
                 new_positions[name] = f"{w}x{h}+{x}+{y}"
             except ValueError:
-                print(f"⚠️ {name} 的輸入格式錯誤")
+                print(f"{name} 的輸入格式錯誤")
                 return
 
-        # 更新設定檔
         save_window_positions(new_positions)
-
-        # 重新啟動整個應用
         os.execl(sys.executable, sys.executable, *sys.argv)
 
 if __name__ == "__main__":
