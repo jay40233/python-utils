@@ -2,6 +2,7 @@ import tkinter as tk
 import math
 import json
 import os
+import sys
 
 CONFIG_FILE = "window_positions.json"
 
@@ -21,17 +22,21 @@ class ProtractorApp:
         self.root.title("Protractor Overlay" if not is_slope else "Slope Measure Overlay")
         self.root.attributes('-topmost', True)
         self.root.attributes('-alpha', 0.5)
-        self.width = 200
-        self.height = 200
         self.is_slope = is_slope
         self.on_move = on_move
 
         if geometry:
+            dims = geometry.split("+")[0]
+            w_str, h_str = dims.split("x")
+            self.width = int(w_str)
+            self.height = int(h_str)
             self.root.geometry(geometry)
         else:
+            self.width = 200
+            self.height = 200
             self.root.geometry(f"{self.width}x{self.height}+2000+1000" if not is_slope else f"{self.width}x{self.height}+800+1000")
 
-        self.canvas = tk.Canvas(self.root, width=self.width, height=self.height, 
+        self.canvas = tk.Canvas(self.root, width=self.width, height=self.height,
                               bg='white', highlightthickness=0)
         self.canvas.pack(fill='both', expand=True)
         self.draw_protractor()
@@ -84,13 +89,17 @@ class HorizontalScaleOverlay:
         self.root.title("Horizontal Scale Overlay")
         self.root.attributes('-topmost', True)
         self.root.attributes('-alpha', 0.5)
-        self.width = 600
-        self.height = 100
         self.on_move = on_move
 
         if geometry:
+            dims = geometry.split("+")[0]
+            w_str, h_str = dims.split("x")
+            self.width = int(w_str)
+            self.height = int(h_str)
             self.root.geometry(geometry)
         else:
+            self.width = 600
+            self.height = 100
             self.root.geometry(f"{self.width}x{self.height}+1000+500")
 
         self.canvas = tk.Canvas(self.root, width=self.width, height=self.height, bg='white', highlightthickness=0)
@@ -141,6 +150,63 @@ class HorizontalScaleOverlay:
         if self.on_move:
             self.on_move(self.root.geometry())
 
+class ControlPanelApp:
+    def __init__(self, master, windows):
+        self.panel = tk.Toplevel(master)
+        self.panel.title("Control Panel")
+        self.panel.geometry("300x150")  # 擴充寬度以容納全部欄位
+
+        self.windows = windows
+        self.entries = {}
+
+        row = 0
+        for name in ['protractor', 'scale', 'slope']:
+            win = self.windows[name]
+            win.update_idletasks()
+            w = win.winfo_width()
+            h = win.winfo_height()
+
+            # 主標籤（代表視窗名稱）
+            tk.Label(self.panel, text=f"{name.capitalize()} :").grid(row=row, column=0, sticky='e', padx=5, pady=2)
+
+            # Width 標籤與輸入欄位
+            tk.Label(self.panel, text="Width").grid(row=row, column=1, sticky='e')
+            w_var = tk.StringVar(value=str(w))
+            w_entry = tk.Entry(self.panel, textvariable=w_var, width=8)
+            w_entry.grid(row=row, column=2, padx=2)
+
+            # Height 標籤與輸入欄位
+            tk.Label(self.panel, text="Height").grid(row=row, column=3, sticky='e')
+            h_var = tk.StringVar(value=str(h))
+            h_entry = tk.Entry(self.panel, textvariable=h_var, width=8)
+            h_entry.grid(row=row, column=4, padx=2)
+
+            self.entries[name] = {'width': w_var, 'height': h_var}
+            row += 1
+
+        # 套用按鈕
+        tk.Button(self.panel, text="套用新尺寸", command=self.apply_sizes).grid(row=row, column=2, columnspan=3, pady=10)
+
+    def apply_sizes(self):
+        new_positions = {}
+
+        for name in self.windows:
+            try:
+                w = int(self.entries[name]['width'].get())
+                h = int(self.entries[name]['height'].get())
+                x = self.windows[name].winfo_x()
+                y = self.windows[name].winfo_y()
+                new_positions[name] = f"{w}x{h}+{x}+{y}"
+            except ValueError:
+                print(f"⚠️ {name} 的輸入格式錯誤")
+                return
+
+        # 更新設定檔
+        save_window_positions(new_positions)
+
+        # 重新啟動整個應用
+        os.execl(sys.executable, sys.executable, *sys.argv)
+
 if __name__ == "__main__":
     positions = load_window_positions()
     # Protractor
@@ -169,6 +235,7 @@ if __name__ == "__main__":
         save_window_positions(positions)
         root.destroy()
 
+    ControlPanelApp(root, {'protractor': root,'scale': scale_window,'slope': slope_measure_window})
     root.protocol("WM_DELETE_WINDOW", on_closing)
     scale_window.protocol("WM_DELETE_WINDOW", on_closing)
     slope_measure_window.protocol("WM_DELETE_WINDOW", on_closing)
