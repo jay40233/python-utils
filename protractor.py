@@ -1,45 +1,55 @@
 import tkinter as tk
 import math
+import json
+import os
+
+CONFIG_FILE = "window_positions.json"
+
+def load_window_positions():
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_window_positions(positions):
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(positions, f)
 
 class ProtractorApp:
-    def __init__(self, root):
+    def __init__(self, root, is_slope=False, geometry=None, on_move=None):
         self.root = root
-        self.root.title("Protractor Overlay")
-        
-        # Make window always on top and transparent
+        self.root.title("Protractor Overlay" if not is_slope else "Slope Measure Overlay")
         self.root.attributes('-topmost', True)
         self.root.attributes('-alpha', 0.5)
-        
-        # Set window size and position
         self.width = 200
         self.height = 200
-        self.root.geometry(f"{self.width}x{self.height}+2000+1000")
-        
-        # Create canvas
+        self.is_slope = is_slope
+        self.on_move = on_move
+
+        if geometry:
+            self.root.geometry(geometry)
+        else:
+            self.root.geometry(f"{self.width}x{self.height}+2000+1000" if not is_slope else f"{self.width}x{self.height}+800+1000")
+
         self.canvas = tk.Canvas(self.root, width=self.width, height=self.height, 
                               bg='white', highlightthickness=0)
         self.canvas.pack(fill='both', expand=True)
-        
-        # Draw protractor
         self.draw_protractor()
-        
-        # Make window draggable
         self.canvas.bind('<Button-1>', self.start_drag)
         self.canvas.bind('<B1-Motion>', self.on_drag)
-        
         self.drag_start_x = 0
         self.drag_start_y = 0
-        
+
     def draw_protractor(self):
         center_x = self.width / 2
         center_y = self.height / 2
         radius = min(self.width, self.height) * 0.28
-        
+
         # Draw semicircle
         self.canvas.create_arc(center_x - radius, center_y - radius,
                              center_x + radius, center_y + radius,
                              start=0, extent=359, style='arc', width=2)
-        
+
         # Draw angle markings
         for angle in range(0, 359, 10):
             rad = math.radians(angle)
@@ -48,34 +58,41 @@ class ProtractorApp:
             x2 = center_x + (radius + 10) * math.cos(rad)
             y2 = center_y - (radius + 10) * math.sin(rad)
             self.canvas.create_line(x1, y1, x2, y2)
-            
             # Add angle labels
             label_x = center_x + (radius + 20) * math.cos(rad)
             label_y = center_y - (radius + 20) * math.sin(rad)
-            self.canvas.create_text(label_x, label_y, text=str(angle), font=('Arial', 8))
-        
+            angle_text = str(angle) if not self.is_slope else f"{angle//10%18}"
+            self.canvas.create_text(label_x, label_y, text=angle_text, font=('Arial', 8))
+
         # Draw center point
         self.canvas.create_oval(center_x-3, center_y-3, center_x+3, center_y+3, fill='black')
-        
+
     def start_drag(self, event):
         self.drag_start_x = event.x_root - self.root.winfo_x()
         self.drag_start_y = event.y_root - self.root.winfo_y()
-        
+
     def on_drag(self, event):
         x = event.x_root - self.drag_start_x
         y = event.y_root - self.drag_start_y
         self.root.geometry(f"+{x}+{y}")
-
+        if self.on_move:
+            self.on_move(self.root.geometry())
 
 class HorizontalScaleOverlay:
-    def __init__(self, root):
+    def __init__(self, root, geometry=None, on_move=None):
         self.root = root
         self.root.title("Horizontal Scale Overlay")
         self.root.attributes('-topmost', True)
         self.root.attributes('-alpha', 0.5)
         self.width = 600
         self.height = 100
-        self.root.geometry(f"{self.width}x{self.height}+1000+500")
+        self.on_move = on_move
+
+        if geometry:
+            self.root.geometry(geometry)
+        else:
+            self.root.geometry(f"{self.width}x{self.height}+1000+500")
+
         self.canvas = tk.Canvas(self.root, width=self.width, height=self.height, bg='white', highlightthickness=0)
         self.canvas.pack(fill='both', expand=True)
         self.draw_scale()
@@ -121,11 +138,38 @@ class HorizontalScaleOverlay:
         x = event.x_root - self.drag_start_x
         y = event.y_root - self.drag_start_y
         self.root.geometry(f"+{x}+{y}")
-
+        if self.on_move:
+            self.on_move(self.root.geometry())
 
 if __name__ == "__main__":
+    positions = load_window_positions()
+    # Protractor
     root = tk.Tk()
-    protractor_app = ProtractorApp(root)
+    def save_protractor_pos(geometry):
+        positions['protractor'] = geometry
+    protractor_app = ProtractorApp(root, geometry=positions.get('protractor'), on_move=save_protractor_pos)
+
+    # Horizontal Scale
     scale_window = tk.Toplevel(root)
-    scale_app = HorizontalScaleOverlay(scale_window)
+    def save_scale_pos(geometry):
+        positions['scale'] = geometry
+    scale_app = HorizontalScaleOverlay(scale_window, geometry=positions.get('scale'), on_move=save_scale_pos)
+
+    # Slope Measure
+    slope_measure_window = tk.Toplevel(root)
+    def save_slope_pos(geometry):
+        positions['slope'] = geometry
+    slope_measure = ProtractorApp(slope_measure_window, True, geometry=positions.get('slope'), on_move=save_slope_pos)
+
+    def on_closing():
+        # Save current window positions
+        positions['protractor'] = root.geometry()
+        positions['scale'] = scale_window.geometry()
+        positions['slope'] = slope_measure_window.geometry()
+        save_window_positions(positions)
+        root.destroy()
+
+    root.protocol("WM_DELETE_WINDOW", on_closing)
+    scale_window.protocol("WM_DELETE_WINDOW", on_closing)
+    slope_measure_window.protocol("WM_DELETE_WINDOW", on_closing)
     root.mainloop()
