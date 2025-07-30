@@ -2,6 +2,7 @@ import tkinter as tk
 import math
 import json
 import os
+from PIL import ImageGrab
 
 CONFIG_FILE = "window_positions.json"
 
@@ -21,8 +22,8 @@ class ProtractorApp:
         self.root.title("Protractor Overlay" if not is_slope else "Slope Measure Overlay")
         self.root.attributes('-topmost', True)
         self.root.attributes('-alpha', 0.5)
-        self.width = 200
-        self.height = 200
+        self.width = 250
+        self.height = 250
         self.is_slope = is_slope
         self.on_move = on_move
 
@@ -37,8 +38,12 @@ class ProtractorApp:
         self.draw_protractor()
         self.canvas.bind('<Button-1>', self.start_drag)
         self.canvas.bind('<B1-Motion>', self.on_drag)
+        self.canvas.bind('<Button-3>', self.report_angle_from_center)  # Add this line
         self.drag_start_x = 0
         self.drag_start_y = 0
+
+        self.angle_label = tk.Label(self.root, text="Angle: --°", font=('Arial', 10), bg='white')
+        self.angle_label.place(x=10, y=10)
 
     def draw_protractor(self):
         center_x = self.width / 2
@@ -78,13 +83,22 @@ class ProtractorApp:
         if self.on_move:
             self.on_move(self.root.geometry())
 
+    def report_angle_from_center(self, event):
+        center_x = self.width / 2
+        center_y = self.height / 2
+        dx = event.x - center_x
+        dy = center_y - event.y  # Invert y to match mathematical convention
+        angle_rad = math.atan2(dy, dx)
+        angle_deg = (math.degrees(angle_rad) + 360) % 360
+        self.angle_label.config(text=f"Angle: {angle_deg:.2f}°")
+
 class HorizontalScaleOverlay:
     def __init__(self, root, geometry=None, on_move=None):
         self.root = root
         self.root.title("Horizontal Scale Overlay")
         self.root.attributes('-topmost', True)
         self.root.attributes('-alpha', 0.5)
-        self.width = 600
+        self.width = 900
         self.height = 100
         self.on_move = on_move
 
@@ -141,6 +155,45 @@ class HorizontalScaleOverlay:
         if self.on_move:
             self.on_move(self.root.geometry())
 
+class ScreenshotOverlay:
+    def __init__(self, root, geometry=None):
+        self.root = root
+        self.root.title("Screenshot Overlay")
+        self.root.attributes('-topmost', True)
+        self.root.attributes('-alpha', 0.8)
+        self.width = 300
+        self.height = 100
+
+        if geometry:
+            self.root.geometry(geometry)
+        else:
+            self.root.geometry(f"{self.width}x{self.height}+1200+700")
+
+        self.button = tk.Button(self.root, text="Screenshot Area", command=self.screenshot_area, font=('Arial', 12))
+        self.button.pack(expand=True, fill='both')
+        self.root.bind('<Button-1>', self.start_drag)
+        self.root.bind('<B1-Motion>', self.on_drag)
+        self.drag_start_x = 0
+        self.drag_start_y = 0
+
+    def start_drag(self, event):
+        self.drag_start_x = event.x_root - self.root.winfo_x()
+        self.drag_start_y = event.y_root - self.root.winfo_y()
+
+    def on_drag(self, event):
+        x = event.x_root - self.drag_start_x
+        y = event.y_root - self.drag_start_y
+        self.root.geometry(f"+{x}+{y}")
+
+    def screenshot_area(self):
+        x = self.root.winfo_rootx()
+        y = self.root.winfo_rooty()
+        w = x + self.root.winfo_width()
+        h = y + self.root.winfo_height()
+        img = ImageGrab.grab(bbox=(x, y, w, h))
+        print((x, y, w, h))
+        img.save("screenshot_overlay.png")
+
 if __name__ == "__main__":
     positions = load_window_positions()
     # Protractor
@@ -161,15 +214,22 @@ if __name__ == "__main__":
         positions['slope'] = geometry
     slope_measure = ProtractorApp(slope_measure_window, True, geometry=positions.get('slope'), on_move=save_slope_pos)
 
+    # Screenshot Overlay
+    # screenshot_window = tk.Toplevel(root)
+    # def save_screenshot_pos(geometry):
+    #     positions['screenshot'] = geometry
+    # screenshot_app = ScreenshotOverlay(screenshot_window, geometry=positions.get('screenshot'))
+
     def on_closing():
-        # Save current window positions
         positions['protractor'] = root.geometry()
         positions['scale'] = scale_window.geometry()
         positions['slope'] = slope_measure_window.geometry()
+        #positions['screenshot'] = screenshot_window.geometry()
         save_window_positions(positions)
         root.destroy()
 
     root.protocol("WM_DELETE_WINDOW", on_closing)
     scale_window.protocol("WM_DELETE_WINDOW", on_closing)
     slope_measure_window.protocol("WM_DELETE_WINDOW", on_closing)
+    # screenshot_window.protocol("WM_DELETE_WINDOW", on_closing)
     root.mainloop()
